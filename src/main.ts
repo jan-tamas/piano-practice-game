@@ -2,11 +2,18 @@ import { playBell, playBuzzer } from './audio';
 import { Piano } from './piano';
 import { pitchClassesEqual } from './scales';
 import { pickScale } from './selector';
-import { load, recordAttempt, resetStats, save } from './storage';
+import { finalize, liveScore, newLiveSession, scoreBracket, type LiveSession } from './session';
+import { load, recordAttempt, recordSession, resetStats, save } from './storage';
 import { Stopwatch, formatMs } from './stopwatch';
-import type { AttemptLog, Difficulty, PitchClass, Scale, Stored } from './types';
+import type { AttemptLog, Difficulty, PitchClass, Scale, Session, Stored } from './types';
 
-type Screen = 'difficulty' | 'round' | 'feedback' | 'history' | 'settings';
+type Screen =
+  | 'difficulty'
+  | 'round'
+  | 'feedback'
+  | 'sessionSummary'
+  | 'history'
+  | 'settings';
 
 type RoundState = {
   scale: Scale;
@@ -26,6 +33,8 @@ let lastScaleId: string | null = null;
 let screen: Screen = 'difficulty';
 let round: RoundState | null = null;
 let feedback: FeedbackState | null = null;
+let liveSession: LiveSession | null = null;
+let lastFinishedSession: Session | null = null;
 
 function render(): void {
   root.innerHTML = '';
@@ -38,6 +47,9 @@ function render(): void {
       break;
     case 'feedback':
       renderFeedback();
+      break;
+    case 'sessionSummary':
+      renderSessionSummary();
       break;
     case 'history':
       renderHistory();
@@ -80,6 +92,7 @@ function renderDifficulty(): void {
     btn.onclick = () => {
       state = { ...state, difficulty: t.id };
       save(state);
+      liveSession = newLiveSession(t.id);
       startRound();
     };
     row.appendChild(btn);
@@ -119,17 +132,7 @@ function renderRound(): void {
   const wrap = document.createElement('div');
   wrap.className = 'screen round-screen';
 
-  const header = document.createElement('div');
-  header.className = 'round-header';
-  const name = document.createElement('div');
-  name.className = 'scale-name';
-  name.textContent = scale.displayName;
-  const timer = document.createElement('div');
-  timer.className = 'timer';
-  timer.id = 'timer';
-  timer.textContent = '00:00.00';
-  header.append(name, timer);
-  wrap.appendChild(header);
+  wrap.appendChild(buildRoundHeader(scale.displayName, '00:00.00'));
 
   const playArea = document.createElement('div');
   playArea.className = 'play-area';
@@ -147,13 +150,44 @@ function renderRound(): void {
   wrap.appendChild(playArea);
   root.appendChild(wrap);
 
-  const piano = new Piano(pianoHost, () => { /* selection tracked internally */ });
+  const piano = new Piano(pianoHost, () => { /* tracked internally */ });
   const stopwatch = new Stopwatch();
   round = { scale, stopwatch, piano };
 
   submit.onclick = () => submitRound();
 
   stopwatch.start((ms) => updateTimer(ms));
+}
+
+function buildRoundHeader(scaleName: string, timerText: string): HTMLElement {
+  const header = document.createElement('div');
+  header.className = 'round-header';
+
+  const left = document.createElement('div');
+  left.className = 'round-header-left';
+  const name = document.createElement('div');
+  name.className = 'scale-name';
+  name.textContent = scaleName;
+  left.appendChild(name);
+
+  const right = document.createElement('div');
+  right.className = 'round-header-right';
+
+  const timer = document.createElement('div');
+  timer.className = 'timer';
+  timer.id = 'timer';
+  timer.textContent = timerText;
+  right.appendChild(timer);
+
+  const endBtn = document.createElement('button');
+  endBtn.type = 'button';
+  endBtn.className = 'end-session-btn';
+  endBtn.textContent = 'End session';
+  endBtn.onclick = () => endSession();
+  right.appendChild(endBtn);
+
+  header.append(left, right);
+  return header;
 }
 
 function updateTimer(ms: number): void {
@@ -181,6 +215,7 @@ function submitRound(): void {
   };
 
   state = recordAttempt(state, attempt);
+  if (liveSession) liveSession.attempts.push(attempt);
   lastScaleId = round.scale.id;
 
   if (!state.settings.muted) {
@@ -196,6 +231,31 @@ function submitRound(): void {
   screen = 'feedback';
 }
 
+function endSession(): void {
+  // If a round is in progress, abandon it (don't record the in-progress attempt).
+  if (round) {
+    round.stopwatch.stop();
+    round = null;
+  }
+  if (!liveSession) {
+    screen = 'difficulty';
+    render();
+    return;
+  }
+  const finished = finalize(liveSession);
+  liveSession = null;
+  if (!finished) {
+    // No attempts — just go back to difficulty.
+    screen = 'difficulty';
+    render();
+    return;
+  }
+  state = recordSession(state, finished);
+  lastFinishedSession = finished;
+  screen = 'sessionSummary';
+  render();
+}
+
 // ---------- Feedback ----------
 
 function renderFeedback(): void {
@@ -204,8 +264,7 @@ function renderFeedback(): void {
     render();
     return;
   }
-  // If we got here via re-render (not via submit), we lost the keyboard state.
-  // Simplest recovery: go back to difficulty.
+  // If we got here via re-render (lost in-place DOM), bail to difficulty.
   screen = 'difficulty';
   render();
 }
@@ -216,10 +275,28 @@ function showFeedbackOverlay(): void {
   if (header) {
     const result = feedback.attempt.correct ? 'correct' : 'incorrect';
     const elapsed = formatMs(feedback.attempt.elapsedMs);
+    const liveScoreText = liveSession
+      ? `Score ${liveScore(liveSession).toFixed(0)}`
+      : '';
     header.innerHTML = `
-      <div class="scale-name">${feedback.scale.displayName}</div>
-      <div class="timer ${result}">${elapsed}</div>
+      <div class="round-header-left">
+        <div class="scale-name">${escapeHtml(feedback.scale.displayName)}</div>
+        ${liveScoreText ? `<div class="live-score">${liveScoreText}</div>` : ''}
+      </div>
+      <div class="round-header-right">
+        <div class="timer ${result}">${elapsed}</div>
+      </div>
     `;
+    // Re-add End session button.
+    const right = header.querySelector('.round-header-right');
+    if (right) {
+      const endBtn = document.createElement('button');
+      endBtn.type = 'button';
+      endBtn.className = 'end-session-btn';
+      endBtn.textContent = 'End session';
+      endBtn.onclick = () => endSession();
+      right.appendChild(endBtn);
+    }
   }
 
   const playArea = root.querySelector('.play-area');
@@ -242,6 +319,196 @@ function showFeedbackOverlay(): void {
     const wrap = root.querySelector('.round-screen');
     wrap?.insertBefore(banner, wrap.querySelector('.play-area'));
   }
+}
+
+// ---------- Session Summary ----------
+
+function renderSessionSummary(): void {
+  const session = lastFinishedSession;
+  if (!session) {
+    screen = 'difficulty';
+    render();
+    return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'screen summary-screen';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Session Summary';
+  wrap.appendChild(title);
+
+  // Big score.
+  const bracket = scoreBracket(session.sessionScore);
+  const scoreBox = document.createElement('div');
+  scoreBox.className = `score-hero ${bracket.className}`;
+  scoreBox.innerHTML = `
+    <div class="score-number">${session.sessionScore.toFixed(0)}</div>
+    <div class="score-label">${bracket.label}</div>
+  `;
+  wrap.appendChild(scoreBox);
+
+  // Sub-stats.
+  const stats = document.createElement('div');
+  stats.className = 'summary-stats';
+  const accuracy =
+    session.attempts > 0
+      ? Math.round((session.correctAttempts / session.attempts) * 100)
+      : 0;
+  const avgTime =
+    session.avgCorrectTimeMs > 0 ? formatMs(session.avgCorrectTimeMs) : '—';
+  stats.innerHTML = `
+    <div class="stat"><div class="stat-v">${session.attempts}</div><div class="stat-k">Attempts</div></div>
+    <div class="stat"><div class="stat-v">${accuracy}%</div><div class="stat-k">Accuracy</div></div>
+    <div class="stat"><div class="stat-v">${avgTime}</div><div class="stat-k">Avg time (correct)</div></div>
+  `;
+  wrap.appendChild(stats);
+
+  // Comparison to previous session.
+  const prev = state.sessions
+    .slice(0, -1) // exclude current (just appended)
+    .filter((s) => s.id !== session.id)
+    .at(-1);
+  const cmp = document.createElement('div');
+  cmp.className = 'comparison';
+  if (prev) {
+    const delta = session.sessionScore - prev.sessionScore;
+    const sign = delta > 0 ? '+' : '';
+    const cls = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+    cmp.innerHTML = `<span class="cmp-${cls}">${sign}${delta.toFixed(1)}</span> vs. previous session (${prev.sessionScore.toFixed(0)})`;
+  } else {
+    cmp.textContent = 'First session — keep going to see how you improve.';
+  }
+  wrap.appendChild(cmp);
+
+  // Chart.
+  const chartWrap = document.createElement('div');
+  chartWrap.className = 'chart-wrap';
+  const chartTitle = document.createElement('div');
+  chartTitle.className = 'chart-title';
+  chartTitle.textContent = 'Recent sessions';
+  chartWrap.appendChild(chartTitle);
+  chartWrap.appendChild(buildChart(state.sessions, session.id));
+  wrap.appendChild(chartWrap);
+
+  // Buttons.
+  const actions = document.createElement('div');
+  actions.className = 'summary-actions';
+  const newBtn = document.createElement('button');
+  newBtn.type = 'button';
+  newBtn.className = 'submit-btn';
+  newBtn.textContent = 'New session';
+  newBtn.onclick = () => {
+    liveSession = newLiveSession(state.difficulty);
+    startRound();
+  };
+  const doneBtn = document.createElement('button');
+  doneBtn.type = 'button';
+  doneBtn.className = 'link-btn';
+  doneBtn.textContent = 'Back to menu';
+  doneBtn.onclick = () => { screen = 'difficulty'; render(); };
+  actions.append(newBtn, doneBtn);
+  wrap.appendChild(actions);
+
+  root.appendChild(wrap);
+}
+
+function buildChart(sessions: Session[], currentId: string): SVGSVGElement {
+  const recent = sessions.slice(-20);
+  const allTimeBest = sessions.length
+    ? Math.max(...sessions.map((s) => s.sessionScore))
+    : 100;
+
+  const W = 600;
+  const H = 200;
+  const PAD_L = 32;
+  const PAD_R = 12;
+  const PAD_T = 12;
+  const PAD_B = 28;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+  const maxScore = 100;
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'chart');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  // Y-axis labels at 0, 50, 100.
+  for (const yVal of [0, 50, 100]) {
+    const y = PAD_T + innerH - (yVal / maxScore) * innerH;
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', String(PAD_L));
+    line.setAttribute('x2', String(W - PAD_R));
+    line.setAttribute('y1', String(y));
+    line.setAttribute('y2', String(y));
+    line.setAttribute('class', 'chart-grid');
+    svg.appendChild(line);
+    const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    lbl.setAttribute('x', String(PAD_L - 6));
+    lbl.setAttribute('y', String(y + 4));
+    lbl.setAttribute('text-anchor', 'end');
+    lbl.setAttribute('class', 'chart-axis');
+    lbl.textContent = String(yVal);
+    svg.appendChild(lbl);
+  }
+
+  // All-time best line.
+  if (sessions.length > 1) {
+    const y = PAD_T + innerH - (allTimeBest / maxScore) * innerH;
+    const best = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    best.setAttribute('x1', String(PAD_L));
+    best.setAttribute('x2', String(W - PAD_R));
+    best.setAttribute('y1', String(y));
+    best.setAttribute('y2', String(y));
+    best.setAttribute('class', 'chart-best');
+    svg.appendChild(best);
+    const bestLbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    bestLbl.setAttribute('x', String(W - PAD_R));
+    bestLbl.setAttribute('y', String(y - 4));
+    bestLbl.setAttribute('text-anchor', 'end');
+    bestLbl.setAttribute('class', 'chart-best-label');
+    bestLbl.textContent = `Best ${allTimeBest.toFixed(0)}`;
+    svg.appendChild(bestLbl);
+  }
+
+  // Bars.
+  const n = recent.length;
+  const slot = innerW / Math.max(n, 1);
+  const barW = Math.max(4, slot * 0.7);
+  recent.forEach((s, i) => {
+    const x = PAD_L + i * slot + (slot - barW) / 2;
+    const h = (s.sessionScore / maxScore) * innerH;
+    const y = PAD_T + innerH - h;
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', String(x));
+    rect.setAttribute('y', String(y));
+    rect.setAttribute('width', String(barW));
+    rect.setAttribute('height', String(h));
+    rect.setAttribute('class', `chart-bar ${s.id === currentId ? 'current' : ''}`);
+    rect.setAttribute('rx', '2');
+    const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    const d = new Date(s.startedAt);
+    titleEl.textContent = `${d.toLocaleString()} — ${s.sessionScore.toFixed(0)} (${s.attempts} attempts)`;
+    rect.appendChild(titleEl);
+    svg.appendChild(rect);
+  });
+
+  // X-axis label.
+  const xLbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  xLbl.setAttribute('x', String(PAD_L + innerW / 2));
+  xLbl.setAttribute('y', String(H - 6));
+  xLbl.setAttribute('text-anchor', 'middle');
+  xLbl.setAttribute('class', 'chart-axis');
+  xLbl.textContent =
+    n === 0
+      ? 'No sessions yet'
+      : n === 1
+      ? '1 session'
+      : `Last ${n} sessions (oldest → newest)`;
+  svg.appendChild(xLbl);
+
+  return svg;
 }
 
 // ---------- History ----------
@@ -279,7 +546,7 @@ function renderHistory(): void {
       const mark = h.correct ? '✓' : '✗';
       tr.innerHTML = `
         <td>${date.toLocaleString()}</td>
-        <td>${h.scaleId}</td>
+        <td>${escapeHtml(h.scaleId)}</td>
         <td>${formatMs(h.elapsedMs)}</td>
         <td class="${cls}">${mark}</td>
       `;
@@ -336,6 +603,16 @@ function renderSettings(): void {
   wrap.appendChild(resetBtn);
 
   root.appendChild(wrap);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    c === '&' ? '&amp;'
+    : c === '<' ? '&lt;'
+    : c === '>' ? '&gt;'
+    : c === '"' ? '&quot;'
+    : '&#39;'
+  );
 }
 
 render();

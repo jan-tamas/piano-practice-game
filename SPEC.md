@@ -93,6 +93,56 @@ Each scale is defined by its **interval pattern** (semitones from root). Pitch-c
 - **Medium:** Easy + Harmonic Minor, Melodic Minor, Major/Minor Pentatonic → 72 scales.
 - **Hard:** all of the above + Blues, the four non-Ionian/Aeolian modes, Whole Tone, Diminished → 168 scales.
 
+## 4a. Sessions and Session Score
+
+A **session** begins when the user picks a difficulty and ends when they tap **End session** (a small button in the top-right of the round/feedback header). Closing the browser also implicitly ends the session — the next visit starts a new one. A session must have at least one completed attempt to be recorded.
+
+### Round Score (per attempt)
+
+A single number on a 0–100 scale that combines accuracy and speed:
+
+```
+roundScore =
+  correct ?  50 + max(0, 50 − elapsedSec × 2)   // 50–100 if correct
+          :  0                                    // 0 if wrong
+```
+
+Reading: **a correct answer is worth at least 50 points, with up to 50 bonus points for speed.** Wrong answers score 0. Reference points: 5s correct = 90, 10s correct = 80, 25s+ correct = 50.
+
+### Session Score
+
+`sessionScore = mean(roundScore over all attempts in the session)`
+
+Single intuitive metric: higher is better, max 100. Bracket interpretations:
+- 90+ : excellent — fast and accurate
+- 70–89 : strong
+- 50–69 : accurate but slow, or very fast with some errors
+- below 50 : building up — accuracy or speed needs work
+
+### Per-Session Stored Fields
+
+```ts
+type Session = {
+  id: string;
+  startedAt: number;
+  endedAt: number;
+  difficulty: Difficulty;
+  attempts: number;
+  correctAttempts: number;
+  sessionScore: number;        // mean roundScore, 0..100
+  avgCorrectTimeMs: number;    // 0 if no correct attempts
+};
+```
+
+### Session Summary Screen
+
+Shown after **End session**:
+- Big number: this session's score (color-coded by bracket).
+- Sub-stats: attempts, accuracy %, avg time on correct attempts.
+- Comparison: delta vs. the user's previous session's score (e.g. "+4 vs. last session").
+- **Chart:** bar chart of `sessionScore` for the last 20 sessions, current session highlighted, showing trend over time. A faint horizontal line marks the user's all-time best.
+- Buttons: **New session** (returns to difficulty select) and **Done** (returns to difficulty select; identical for now).
+
 ## 5. Scoring
 
 A submission is **correct** iff the set of marked pitch classes equals the scale's pitch-class set. Octave duplicates are ignored. No partial credit on the round result (bell vs. buzzer is binary), but per-note correctness *is* recorded for adaptive selection (§6).
@@ -146,6 +196,7 @@ type Stored = {
   difficulty: 'easy' | 'medium' | 'hard';
   history: AttemptLog[];           // append-only, capped at e.g. 1000 entries
   scaleStats: Record<string, ScaleStats>;
+  sessions: Session[];             // append-only, capped at e.g. 200 entries
   settings: { muted: boolean };
 };
 

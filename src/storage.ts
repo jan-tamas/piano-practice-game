@@ -1,13 +1,15 @@
-import type { AttemptLog, Stored } from './types';
+import type { AttemptLog, Session, Stored } from './types';
 
 const KEY = 'scale-practice-game/v1';
 const HISTORY_CAP = 1000;
 const RECENT_CAP = 10;
+const SESSIONS_CAP = 200;
 
 const DEFAULT: Stored = {
   difficulty: 'easy',
   history: [],
   scaleStats: {},
+  sessions: [],
   settings: { muted: false },
 };
 
@@ -20,6 +22,7 @@ export function load(): Stored {
       difficulty: parsed.difficulty ?? DEFAULT.difficulty,
       history: parsed.history ?? [],
       scaleStats: parsed.scaleStats ?? {},
+      sessions: parsed.sessions ?? [],
       settings: { ...DEFAULT.settings, ...(parsed.settings ?? {}) },
     };
   } catch {
@@ -47,11 +50,19 @@ export function recordAttempt(state: Stored, attempt: AttemptLog): Stored {
   return next;
 }
 
+export function recordSession(state: Stored, session: Session): Stored {
+  const sessions = [...state.sessions, session].slice(-SESSIONS_CAP);
+  const next: Stored = { ...state, sessions };
+  save(next);
+  return next;
+}
+
 export function resetStats(state: Stored): Stored {
   const next: Stored = {
     ...state,
     history: [],
     scaleStats: {},
+    sessions: [],
   };
   save(next);
   return next;

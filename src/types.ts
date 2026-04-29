@@ -44,9 +44,21 @@ export type Settings = {
   muted: boolean;
 };
 
+export type Session = {
+  id: string;
+  startedAt: number;
+  endedAt: number;
+  difficulty: Difficulty;
+  attempts: number;
+  correctAttempts: number;
+  sessionScore: number;       // 0..100
+  avgCorrectTimeMs: number;
+};
+
 export type Stored = {
   difficulty: Difficulty;
   history: AttemptLog[];
   scaleStats: Record<string, ScaleStats>;
+  sessions: Session[];
   settings: Settings;
 };

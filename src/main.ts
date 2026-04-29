@@ -1,4 +1,4 @@
-import { playBell, playBuzzer } from './audio';
+import { playBell, playBuzzer, playChord } from './audio';
 import { addListener as addMidiListener, getHeldMidis, initMidi, isMidiSupported } from './midi';
 import { Piano } from './piano';
 import { pitchClassesEqual } from './scales';
@@ -334,8 +334,12 @@ function submitRound(auto: boolean): void {
   lastPromptId[mode] = round.prompt.id;
 
   if (!state.settings.muted) {
-    if (correct) playBell();
-    else playBuzzer();
+    if (correct) {
+      if (mode === 'chords') playChord(round.piano.selectedMidis());
+      else playBell();
+    } else {
+      playBuzzer();
+    }
   }
 
   // Auto-advance only fires on a correct match — skip the feedback screen and

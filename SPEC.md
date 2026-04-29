@@ -11,6 +11,7 @@ The user picks a **mode** — *Scales* or *Chords* — on the entry screen; the 
 - **Web app** (single-page, runs in any modern browser). Web is the simplest way to deliver a horizontal piano UI with audio feedback that runs on tablets, phones, and desktops without an install.
 - **Stack:** Vite + vanilla TypeScript + CSS. No framework needed for a single-screen game; keeps the bundle small and the code direct.
 - **Audio:** Web Audio API for bell/buzzer feedback (synthesized — no asset files needed). Optional: short note tone on key tap for satisfaction.
+- **MIDI input:** Web MIDI API (`navigator.requestMIDIAccess`). The app subscribes to *all* connected MIDI inputs and routes note-on/note-off into the same selection model as the on-screen keyboard. Browsers without Web MIDI (e.g. Safari/Firefox without flags) silently fall back to on-screen-only.
 - **Persistence:** `localStorage` for scores and per-scale stats. No backend.
 - **Orientation:** Designed for landscape. On portrait phones, show a "rotate device" overlay.
 
@@ -33,6 +34,8 @@ The user picks a **mode** — *Scales* or *Chords* — on the entry screen; the 
 - **Mode toggle** at the top: **Scales** / **Chords**. The chosen mode is remembered across sessions and determines what the difficulty tiers below mean.
 - **One-line howto** under the subtitle: *"Tap every key that belongs to the scale or chord, then Submit. You're timed — accuracy and speed both count."* Sets expectations for first-time users.
 - Three buttons: **Easy**, **Medium**, **Hard** — descriptions adapt to the active mode.
+- **Auto-advance toggle.** A checkbox on the title screen (`settings.autoAdvance`, persisted). When on, a round auto-submits the moment the selected pitch-class set exactly matches the prompt's set — no Submit press needed. Lets the user flow through prompts on a real piano. See §6a for behavior details.
+- **MIDI hint line** indicating whether the browser supports Web MIDI; no per-device picker (we listen to all inputs).
 - Small "History" link → opens a panel showing the log of past attempts (mode, prompt, time, result, date) with a mode filter.
 - Difficulty choice is remembered across sessions.
 
@@ -58,6 +61,9 @@ Layout (landscape):
 - **Bottom:** piano keyboard, ~2.5 octaves (C3 to F5 → 30 keys: 18 white + 12 black). Spans most of the screen width.
 - **Right of keyboard:** Submit button, large enough to tap with the thumb.
 - **Tapping a key** toggles its "selected" state (visually highlighted). Tapping again unmarks.
+- **MIDI input** is plumbed into the same selection state, with mode-specific behavior:
+  - **Scale mode (toggle):** MIDI note-on toggles the key's selection; note-off does nothing. You can't physically hold 7 keys at once on a piano, so the user has to play notes one at a time and toggle them on.
+  - **Chord mode (held):** the selection follows the set of keys currently physically pressed — note-on adds, note-off removes. This makes "no extra keys" meaningful: a stray held note disqualifies the match. On-screen clicks in chord mode still toggle (they have no release event).
 - **No octave matters** for scoring — the user only needs to mark the correct *pitch classes*, but they may mark them in any octave shown. Marking the same pitch class in two octaves still counts as correct (both are the right note).
 
 ### 3.3 Feedback Screen
@@ -181,6 +187,27 @@ Shown after **End session**:
 - **Chart:** bar chart of `sessionScore` for the last 20 sessions, current session highlighted, showing trend over time. A faint horizontal line marks the user's all-time best.
 - Buttons: **New session** (returns to difficulty select) and **Done** (returns to difficulty select; identical for now).
 
+## 4c. Auto-Advance Mode
+
+A user-toggleable mode (`settings.autoAdvance`, set on the title screen) that lets the user flow through prompts without pressing Submit between each one.
+
+**Trigger condition.** On every change to the selection set (whether from a click, a MIDI note-on, or a MIDI note-off), the app checks: does the selected pitch-class set *exactly* equal the prompt's pitch-class set? If yes, the round auto-submits as if the user had pressed Submit. There is no settle delay — the moment the sets match, advance happens.
+
+**Why "no extras" works.**
+- In **chord mode** the selection model is "currently held," so a wrong key actively held disqualifies the match. The user must play exactly the chord tones.
+- In **scale mode** the selection model is "toggle." Each note-on flips one key's selection. Reaching the full scale set requires toggling each correct note on and no others — banging on every key of the scale would also toggle everything in between, never settling on the exact pc set.
+
+In both cases the user is gated on producing the *exact* set, not a superset.
+
+**Feedback flow under auto-advance.** When the trigger fires (always a *correct* match by construction), the app:
+1. Records the attempt with the elapsed time (counts toward the session score, exactly like a manual correct submission).
+2. Plays the bell.
+3. Skips the feedback screen and starts the next round immediately.
+
+The user can still press Submit manually at any time. A manual submission with the wrong set follows the normal incorrect-feedback flow (buzzer + colored keys).
+
+**Carry-over of held notes between chord-mode rounds.** When a new round starts in chord mode, the selection state is initialized from whatever MIDI notes are still physically held. This avoids a "release everything between rounds" interruption: if the next chord happens to be what's already held, it auto-advances instantly; if not, releasing and pressing the new chord works as expected.
+
 ## 5. Scoring
 
 A submission is **correct** iff the set of marked pitch classes equals the scale's pitch-class set. Octave duplicates are ignored. No partial credit on the round result (bell vs. buzzer is binary), but per-note correctness *is* recorded for adaptive selection (§6).
@@ -235,7 +262,7 @@ type Stored = {
   history: AttemptLog[];           // append-only, capped at e.g. 1000 entries
   scaleStats: Record<string, ScaleStats>;
   sessions: Session[];             // append-only, capped at e.g. 200 entries
-  settings: { muted: boolean };
+  settings: { muted: boolean; autoAdvance: boolean };
 };
 
 type AttemptLog = {
@@ -259,9 +286,9 @@ Derived numbers (`errorRate`, `avgTimeMs`) are computed on the fly from `recentR
 
 Reserved for later versions, in rough priority order:
 
-1. **Chord-practice mode.** A toggle (or separate game mode) that swaps "scale" for "chord": the prompt becomes a chord name (e.g. "D minor 7", "G7", "C# dim") and the user marks the chord tones on the keyboard. Same adaptive selection, scoring, and feedback machinery. Will require a chord catalog (triads, 7ths, extensions) and a difficulty tiering analogous to scales.
-2. **MIDI keyboard input** via the Web MIDI API. A connected MIDI keyboard would let the user press real keys to mark notes — closer to actual practice. Sustain/release timing could also feed into scoring (e.g. rewarding keys held simultaneously vs. one at a time).
-3. **Per-note audio toggle.** A setting that controls whether each tap on the on-screen keyboard plays the corresponding note. Default ON for beginners (helps build the ear), OFF for advanced users who want to test pure recall. Independent from the existing bell/buzzer mute. Would synthesize tones via Web Audio (same engine as feedback sounds).
+1. **Per-note audio toggle.** A setting that controls whether each tap on the on-screen keyboard plays the corresponding note. Default ON for beginners (helps build the ear), OFF for advanced users who want to test pure recall. Independent from the existing bell/buzzer mute. Would synthesize tones via Web Audio (same engine as feedback sounds).
+2. **MIDI device picker.** Currently the app listens to all connected inputs; a Settings picker could let users disable specific devices.
+3. **MIDI velocity / sustain in scoring.** Reward simultaneous chord voicing vs. arpeggiation, or use note-off timing.
 4. Note name / interval display on the keys (the user is supposed to know the notes).
 5. Multiplayer, leaderboards, accounts.
 6. Audio playback of the *full* scale (not just per-tap notes) — could play the scale up and down on demand as a hint.
@@ -282,6 +309,7 @@ scale-practice-game/
     ├── piano.ts             # keyboard rendering + key-toggle logic
     ├── stopwatch.ts
     ├── audio.ts             # bell / buzzer synthesis
+    ├── midi.ts              # Web MIDI input — fans note on/off to listeners
     ├── storage.ts           # localStorage wrapper
     ├── selector.ts          # adaptive scale picking
     ├── screens/

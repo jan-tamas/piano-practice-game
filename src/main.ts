@@ -1,4 +1,5 @@
 import { playBell, playBuzzer } from './audio';
+import { addListener as addMidiListener, getHeldMidis, initMidi, isMidiSupported } from './midi';
 import { Piano } from './piano';
 import { pitchClassesEqual } from './scales';
 import { pickPrompt } from './selector';
@@ -19,6 +20,7 @@ type RoundState = {
   prompt: Prompt;
   stopwatch: Stopwatch;
   piano: Piano;
+  unsubscribeMidi: () => void;
 };
 
 type FeedbackState = {
@@ -136,6 +138,33 @@ function renderDifficulty(): void {
 
   wrap.appendChild(row);
 
+  // Auto-advance toggle — flow practice without pressing Submit.
+  const autoRow = document.createElement('label');
+  autoRow.className = 'title-toggle';
+  const autoCb = document.createElement('input');
+  autoCb.type = 'checkbox';
+  autoCb.checked = state.settings.autoAdvance;
+  autoCb.onchange = () => {
+    state = {
+      ...state,
+      settings: { ...state.settings, autoAdvance: autoCb.checked },
+    };
+    save(state);
+  };
+  autoRow.appendChild(autoCb);
+  const autoText = document.createElement('span');
+  autoText.textContent =
+    ' Auto-advance — skip Submit; next prompt appears as soon as the right notes are played';
+  autoRow.appendChild(autoText);
+  wrap.appendChild(autoRow);
+
+  const midiHint = document.createElement('p');
+  midiHint.className = 'midi-hint';
+  midiHint.textContent = isMidiSupported()
+    ? 'MIDI keyboards are supported — connect one and play.'
+    : 'MIDI input not supported in this browser (try Chrome/Edge).';
+  wrap.appendChild(midiHint);
+
   const links = document.createElement('div');
   links.className = 'links';
   const histLink = document.createElement('button');
@@ -182,18 +211,56 @@ function renderRound(): void {
   submit.type = 'button';
   submit.className = 'submit-btn';
   submit.textContent = 'Submit';
-  playArea.appendChild(submit);
+  if (!state.settings.autoAdvance) playArea.appendChild(submit);
 
   wrap.appendChild(playArea);
   root.appendChild(wrap);
 
-  const piano = new Piano(pianoHost, () => { /* tracked internally */ });
-  const stopwatch = new Stopwatch();
-  round = { prompt, stopwatch, piano };
+  // Chord mode uses 'held' selection so "no extra keys" is meaningful (a
+  // held note that doesn't belong fails the match). Scale mode toggles since
+  // you can't physically hold 7 keys at once.
+  const selectionMode = mode === 'chords' ? 'held' : 'toggle';
+  // In held mode, carry over keys the user is still physically pressing so
+  // there's no perceived lag between rounds.
+  const initialSelected =
+    selectionMode === 'held' ? getHeldMidis() : new Set<number>();
 
-  submit.onclick = () => submitRound();
+  const promptPcs = new Set(prompt.pitchClasses);
+  const piano = new Piano(
+    pianoHost,
+    (selectedPcs) => onSelectionChange(selectedPcs, promptPcs),
+    selectionMode,
+    initialSelected,
+  );
+  const stopwatch = new Stopwatch();
+
+  const unsubscribeMidi = addMidiListener({
+    onNoteOn: (midi) => piano.noteOn(midi),
+    onNoteOff: (midi) => piano.noteOff(midi),
+  });
+
+  round = { prompt, stopwatch, piano, unsubscribeMidi };
+
+  submit.onclick = () => submitRound(false);
 
   stopwatch.start((ms) => updateTimer(ms));
+
+  // If carry-over already matches (rare), check once after construction.
+  if (selectionMode === 'held' && initialSelected.size > 0) {
+    onSelectionChange(piano.selectedPcs(), promptPcs);
+  }
+}
+
+function onSelectionChange(
+  selectedPcs: Set<PitchClass>,
+  promptPcs: Set<PitchClass>,
+): void {
+  if (!round) return;
+  if (!state.settings.autoAdvance) return;
+  if (selectedPcs.size !== promptPcs.size) return;
+  for (const pc of selectedPcs) if (!promptPcs.has(pc)) return;
+  // Match — auto-submit.
+  submitRound(true);
 }
 
 function buildRoundHeader(
@@ -241,9 +308,10 @@ function updateTimer(ms: number): void {
   if (el) el.textContent = formatMs(ms);
 }
 
-function submitRound(): void {
+function submitRound(auto: boolean): void {
   if (!round) return;
   const elapsedMs = round.stopwatch.stop();
+  round.unsubscribeMidi();
   const promptPcs = new Set(round.prompt.pitchClasses);
   const markedPcs = round.piano.selectedPcs();
 
@@ -270,6 +338,14 @@ function submitRound(): void {
     else playBuzzer();
   }
 
+  // Auto-advance only fires on a correct match — skip the feedback screen and
+  // jump straight into the next round so the user can keep playing.
+  if (auto && correct) {
+    round = null;
+    startRound();
+    return;
+  }
+
   feedback = { prompt: round.prompt, attempt };
   round.piano.setInteractive(false);
   round.piano.showFeedback(promptPcs);
@@ -282,6 +358,7 @@ function endSession(): void {
   // If a round is in progress, abandon it (don't record the in-progress attempt).
   if (round) {
     round.stopwatch.stop();
+    round.unsubscribeMidi();
     round = null;
   }
   if (!liveSession) {
@@ -754,6 +831,8 @@ function renderSettings(): void {
 
   root.appendChild(wrap);
 }
+
+void initMidi();
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>

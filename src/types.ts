@@ -78,6 +78,7 @@ export type ScaleStats = {
 
 export type Settings = {
   muted: boolean;
+  autoAdvance: boolean;
 };
 
 export type Session = {

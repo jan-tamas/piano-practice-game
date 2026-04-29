@@ -12,11 +12,18 @@ type KeyDef = {
   pc: PitchClass;
   octave: number;
   isBlack: boolean;
-  whiteIndex: number;          // for white: its own index 0..17. for black: index of white key immediately to its left.
-  label: string;               // e.g. "C3"
+  whiteIndex: number;
+  label: string;
 };
 
 export type KeyHighlight = 'correct' | 'wrong' | 'missed';
+
+// 'toggle' — clicks and MIDI note-on toggle membership; note-off does nothing.
+//            Used for scales (you can't physically hold 7 keys at once).
+// 'held'  — selection follows the currently-pressed set: note-on adds, note-off
+//            removes. Clicks still toggle (no release event for a click).
+//            Used for chords so "no extra keys" is meaningful.
+export type SelectionMode = 'toggle' | 'held';
 
 function buildKeys(): KeyDef[] {
   const keys: KeyDef[] = [];
@@ -42,14 +49,24 @@ export class Piano {
   private host: HTMLElement;
   private keys: KeyDef[];
   private keyEls: HTMLButtonElement[] = [];
-  private selected = new Set<number>();   // midi numbers
+  private selected = new Set<number>();
   private highlights = new Map<number, KeyHighlight>();
   private interactive = true;
+  private selectionMode: SelectionMode;
   private onChange: (selectedPcs: Set<PitchClass>) => void;
 
-  constructor(host: HTMLElement, onChange: (selectedPcs: Set<PitchClass>) => void) {
+  constructor(
+    host: HTMLElement,
+    onChange: (selectedPcs: Set<PitchClass>) => void,
+    selectionMode: SelectionMode = 'toggle',
+    initialSelected: Iterable<number> = [],
+  ) {
     this.host = host;
     this.onChange = onChange;
+    this.selectionMode = selectionMode;
+    for (const m of initialSelected) {
+      if (m >= RANGE_START && m <= RANGE_END_INCL) this.selected.add(m);
+    }
     this.keys = buildKeys();
     this.render();
   }
@@ -82,8 +99,6 @@ export class Piano {
       this.keyEls[k.midi] = btn;
 
       if (k.isBlack) {
-        // Position centered on the boundary between whiteIndex and whiteIndex+1.
-        // We place its center at (whiteIndex + 1) / whiteCount of the row width.
         btn.style.left = `calc(${(k.whiteIndex + 1)} * (100% / var(--white-count)) - var(--black-half-width))`;
         blackLayer.appendChild(btn);
       } else {
@@ -97,20 +112,39 @@ export class Piano {
 
   private handleClick(midi: number): void {
     if (!this.interactive) return;
-    if (this.selected.has(midi)) {
-      this.selected.delete(midi);
-    } else {
+    if (this.selected.has(midi)) this.selected.delete(midi);
+    else this.selected.add(midi);
+    this.applyVisuals();
+    this.onChange(this.selectedPcs());
+  }
+
+  // Called by external MIDI plumbing.
+  noteOn(midi: number): void {
+    if (!this.interactive) return;
+    if (midi < RANGE_START || midi > RANGE_END_INCL) return;
+    if (this.selectionMode === 'held') {
+      if (this.selected.has(midi)) return;
       this.selected.add(midi);
+    } else {
+      // toggle
+      if (this.selected.has(midi)) this.selected.delete(midi);
+      else this.selected.add(midi);
     }
+    this.applyVisuals();
+    this.onChange(this.selectedPcs());
+  }
+
+  noteOff(midi: number): void {
+    if (this.selectionMode !== 'held') return;
+    if (!this.selected.has(midi)) return;
+    this.selected.delete(midi);
     this.applyVisuals();
     this.onChange(this.selectedPcs());
   }
 
   selectedPcs(): Set<PitchClass> {
     const set = new Set<PitchClass>();
-    for (const m of this.selected) {
-      set.add((m % 12) as PitchClass);
-    }
+    for (const m of this.selected) set.add((m % 12) as PitchClass);
     return set;
   }
 
@@ -130,7 +164,6 @@ export class Piano {
   }
 
   showFeedback(scalePcs: Set<PitchClass>): void {
-    // Clear highlights.
     this.highlights.clear();
     const markedPcs = this.selectedPcs();
 

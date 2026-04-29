@@ -13,7 +13,7 @@ const DEFAULT: Stored = {
   chordHistory: [],
   chordStats: {},
   sessions: [],
-  settings: { muted: false },
+  settings: { muted: false, autoAdvance: false },
 };
 
 export function load(): Stored {

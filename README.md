@@ -18,6 +18,8 @@ The picker is **adaptive** — scales/chords you get wrong or play slowly come u
   - **Chords — Medium:** adds dim, aug, sus2, sus4, m7♭5, dim7 (132 chords)
   - **Chords — Hard:** adds 9, maj9, m9, 11, 13 (192 chords)
 - **2.5-octave on-screen keyboard** (C3–F5) — landscape layout
+- **MIDI keyboard input** — connect a MIDI keyboard and play real keys. The app listens to all connected MIDI inputs. In **chord** mode, selection follows the keys you're physically holding (note-on adds, note-off removes), so a wrong key disqualifies the match. In **scale** mode, MIDI note-on toggles a key (since you can't hold 7 keys at once); note-off does nothing.
+- **Auto-advance mode** — toggle on the title screen. With it on, the game submits and moves to the next prompt the moment you've selected exactly the right pitch classes (no extras), so you can practice in flow without tapping Submit between every chord. Works for both modes and both input types.
 - **Adaptive selection** weighted by recent error rate, slowness, and unseen prompts (separate stats per mode)
 - **Audio feedback** — synthesized bell/buzzer (no asset files), mute toggle in settings
 - **Session tracking** with a 0–100 score combining accuracy and speed, plus a chart of recent sessions with separate trend lines for scales and chords (filterable)
@@ -42,7 +44,7 @@ Your **session score** is the average of all round scores in the session. 5s cor
 - `localStorage` for persistence
 - SVG for the session-score chart
 
-See [SPEC.md](SPEC.md) for the full design doc, including the adaptive-selection formula and planned features (MIDI input, per-note tap audio).
+See [SPEC.md](SPEC.md) for the full design doc, including the adaptive-selection formula and planned features (per-note tap audio).
 
 ## Local Development
 

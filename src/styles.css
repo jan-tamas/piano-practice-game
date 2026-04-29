@@ -84,6 +84,26 @@ html, body {
   justify-content: center;
 }
 
+.title-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-dim);
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+  cursor: pointer;
+  max-width: 620px;
+  line-height: 1.4;
+}
+
+.title-toggle input { cursor: pointer; }
+
+.midi-hint {
+  color: var(--fg-dim);
+  font-size: 0.8rem;
+  margin: 0 0 24px;
+}
+
 .difficulty-btn {
   background: var(--bg-2);
   color: var(--fg);

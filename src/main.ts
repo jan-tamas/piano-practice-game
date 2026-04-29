@@ -832,6 +832,21 @@ function renderSettings(): void {
   root.appendChild(wrap);
 }
 
+// Any MIDI note outside the on-screen piano range (C3..F5) doubles as a
+// shortcut: start a round from the title screen, or bail out of a round/
+// feedback screen back to the title. Works regardless of keyboard size.
+addMidiListener({
+  onNoteOn: (midi) => {
+    if (midi >= 48 && midi <= 77) return;
+    if (screen === 'difficulty') {
+      liveSession = newLiveSession(state.mode, state.difficulty);
+      startRound();
+    } else if (screen === 'round' || screen === 'feedback') {
+      endSession();
+    }
+  },
+});
+
 void initMidi();
 
 function escapeHtml(s: string): string {

@@ -1,8 +1,10 @@
-# Piano Scale Practice Game — Specification
+# Piano Scale & Chord Practice Game — Specification
 
 ## 1. Purpose
 
-A practice game that helps piano players recognize the notes of musical scales faster and more accurately. The user is shown a scale name, taps the keys they believe belong to that scale on an on-screen keyboard, and submits. The app times them, scores them, and adapts future scale selection toward the scales they struggle with.
+A practice game that helps piano players recognize the notes of musical scales and chords faster and more accurately. The user is shown a scale or chord name, taps the keys they believe belong to it on an on-screen keyboard, and submits. The app times them, scores them, and adapts future selection toward the scales/chords they struggle with.
+
+The user picks a **mode** — *Scales* or *Chords* — on the entry screen; the rest of the app behaves identically across modes (same keyboard, scoring, adaptive selection, sessions). Stats and adaptive history are kept separately per mode so progress in one doesn't affect picking in the other.
 
 ## 2. Platform & Tech Stack
 
@@ -28,8 +30,9 @@ A practice game that helps piano players recognize the notes of musical scales f
 
 ### 3.1 Difficulty Select (entry screen)
 
-- Three buttons: **Easy**, **Medium**, **Hard**.
-- Small "History" link → opens a panel showing the log of past attempts (scale, time, result, date).
+- **Mode toggle** at the top: **Scales** / **Chords**. The chosen mode is remembered across sessions and determines what the difficulty tiers below mean.
+- Three buttons: **Easy**, **Medium**, **Hard** — descriptions adapt to the active mode.
+- Small "History" link → opens a panel showing the log of past attempts (mode, prompt, time, result, date) with a mode filter.
 - Difficulty choice is remembered across sessions.
 
 ### 3.2 Round Screen
@@ -92,6 +95,40 @@ Each scale is defined by its **interval pattern** (semitones from root). Pitch-c
 - **Easy:** Major + Natural Minor → 24 scales.
 - **Medium:** Easy + Harmonic Minor, Melodic Minor, Major/Minor Pentatonic → 72 scales.
 - **Hard:** all of the above + Blues, the four non-Ionian/Aeolian modes, Whole Tone, Diminished → 168 scales.
+
+## 4b. Chord Catalog
+
+Each chord is defined by its **interval pattern** (semitones from root). Pitch-class set for a given root is computed from the pattern.
+
+| Chord | Suffix | Pattern | Difficulty tier |
+|---|---|---|---|
+| Major triad        | (none)   | 0,4,7         | Easy   |
+| Minor triad        | `m`      | 0,3,7         | Easy   |
+| Major 7            | `maj7`   | 0,4,7,11      | Easy   |
+| Minor 7            | `m7`     | 0,3,7,10      | Easy   |
+| Dominant 7         | `7`      | 0,4,7,10      | Easy   |
+| Diminished triad   | `dim`    | 0,3,6         | Medium |
+| Augmented triad    | `aug`    | 0,4,8         | Medium |
+| Sus2               | `sus2`   | 0,2,7         | Medium |
+| Sus4               | `sus4`   | 0,5,7         | Medium |
+| Half-diminished 7  | `m7♭5`   | 0,3,6,10      | Medium |
+| Diminished 7       | `dim7`   | 0,3,6,9       | Medium |
+| Dominant 9         | `9`      | 0,2,4,7,10    | Hard   |
+| Major 9            | `maj9`   | 0,2,4,7,11    | Hard   |
+| Minor 9            | `m9`     | 0,2,3,7,10    | Hard   |
+| Dominant 11        | `11`     | 0,2,4,5,7,10  | Hard   |
+| Dominant 13        | `13`     | 0,2,4,7,9,10  | Hard   |
+
+**Notes on extended-chord voicings:**
+- `11` (dominant 11) includes the 3rd for theoretical completeness even though jazz voicings often omit it.
+- `13` (dominant 13) omits the 11 to match common jazz practice (root, 3, 5, ♭7, 9, 13).
+
+**Roots:** all 12 chromatic roots, named with the standard jazz lead-sheet convention — flats preferred for non-natural roots except F# (so: C, Db, D, Eb, E, F, F#, G, Ab, A, Bb, B). The same table is used for all chord qualities.
+
+**Difficulty tiers** are inclusive going up:
+- **Easy:** Major triad, Minor triad, maj7, m7, 7 → 60 chords.
+- **Medium:** Easy + dim, aug, sus2, sus4, m7♭5, dim7 → 132 chords.
+- **Hard:** all of the above + 9, maj9, m9, 11, 13 → 192 chords.
 
 ## 4a. Sessions and Session Score
 

@@ -1,22 +1,26 @@
 # Scale Practice Game
 
-A browser-based practice game for piano players who want to get faster and more accurate at recognizing the notes of musical scales.
+A browser-based practice game for piano players who want to get faster and more accurate at recognizing the notes of musical scales and chords.
 
-The app shows you a randomly chosen scale (e.g. *F# Harmonic Minor*), starts a stopwatch, and asks you to tap the keys belonging to that scale on an on-screen keyboard. Tap to mark, tap again to unmark, then **Submit** to score yourself. A bell plays if you got it right; a buzzer plays if you didn't, and the correct keys are revealed in green/amber/red so you can see exactly what you missed.
+The app shows you a randomly chosen scale (e.g. *F# Harmonic Minor*) or chord (e.g. *Cmaj7*, *G7*, *Bbm7♭5*), starts a stopwatch, and asks you to tap the keys belonging to that scale/chord on an on-screen keyboard. Tap to mark, tap again to unmark, then **Submit** to score yourself. A bell plays if you got it right; a buzzer plays if you didn't, and the correct keys are revealed in green/amber/red so you can see exactly what you missed.
 
-The scale picker is **adaptive** — scales you get wrong or play slowly come up more often than ones you've already mastered.
+The picker is **adaptive** — scales/chords you get wrong or play slowly come up more often than ones you've already mastered.
 
 ## Features
 
-- **Three difficulty tiers**
-  - **Easy:** Major and Natural Minor scales (24 scales)
-  - **Medium:** adds Harmonic/Melodic Minor and Pentatonics (72 scales)
-  - **Hard:** adds Modes, Blues, Whole Tone, Diminished (168 scales)
+- **Two practice modes** — toggle between **Scales** and **Chords** on the start screen
+- **Three difficulty tiers per mode**
+  - **Scales — Easy:** Major and Natural Minor (24 scales)
+  - **Scales — Medium:** adds Harmonic/Melodic Minor and Pentatonics (72 scales)
+  - **Scales — Hard:** adds Modes, Blues, Whole Tone, Diminished (168 scales)
+  - **Chords — Easy:** Major / Minor triads + maj7, m7, 7 (60 chords)
+  - **Chords — Medium:** adds dim, aug, sus2, sus4, m7♭5, dim7 (132 chords)
+  - **Chords — Hard:** adds 9, maj9, m9, 11, 13 (192 chords)
 - **2.5-octave on-screen keyboard** (C3–F5) — landscape layout
-- **Adaptive scale selection** weighted by recent error rate, slowness, and unseen scales
+- **Adaptive selection** weighted by recent error rate, slowness, and unseen prompts (separate stats per mode)
 - **Audio feedback** — synthesized bell/buzzer (no asset files), mute toggle in settings
-- **Session tracking** with a 0–100 score combining accuracy and speed, plus a chart of recent sessions so you can watch yourself improve
-- **History** of past attempts, persisted in `localStorage`
+- **Session tracking** with a 0–100 score combining accuracy and speed, plus a chart of recent sessions with separate trend lines for scales and chords (filterable)
+- **History** of past attempts with mode column and filter, persisted in `localStorage`
 - **Reset stats** button (with confirm) for starting fresh
 
 ## Scoring
@@ -37,7 +41,7 @@ Your **session score** is the average of all round scores in the session. 5s cor
 - `localStorage` for persistence
 - SVG for the session-score chart
 
-See [SPEC.md](SPEC.md) for the full design doc, including the adaptive-selection formula and planned features (chord-practice mode, MIDI input, per-note tap audio).
+See [SPEC.md](SPEC.md) for the full design doc, including the adaptive-selection formula and planned features (MIDI input, per-note tap audio).
 
 ## Local Development
 

@@ -77,6 +77,12 @@ function renderDifficulty(): void {
   sub.textContent = 'Pick a mode and difficulty';
   wrap.appendChild(sub);
 
+  const howto = document.createElement('p');
+  howto.className = 'howto';
+  howto.textContent =
+    'Tap every key that belongs to the scale or chord, then Submit. You’re timed — accuracy and speed both count.';
+  wrap.appendChild(howto);
+
   // Mode toggle.
   const modeRow = document.createElement('div');
   modeRow.className = 'mode-toggle';
@@ -163,7 +169,7 @@ function renderRound(): void {
   const wrap = document.createElement('div');
   wrap.className = 'screen round-screen';
 
-  wrap.appendChild(buildRoundHeader(prompt.displayName, '00:00.00'));
+  wrap.appendChild(buildRoundHeader(prompt.displayName, '00:00.00', mode));
 
   const playArea = document.createElement('div');
   playArea.className = 'play-area';
@@ -190,12 +196,21 @@ function renderRound(): void {
   stopwatch.start((ms) => updateTimer(ms));
 }
 
-function buildRoundHeader(promptName: string, timerText: string): HTMLElement {
+function buildRoundHeader(
+  promptName: string,
+  timerText: string,
+  mode: Mode,
+): HTMLElement {
   const header = document.createElement('div');
   header.className = 'round-header';
 
   const left = document.createElement('div');
   left.className = 'round-header-left';
+  const hint = document.createElement('div');
+  hint.className = 'prompt-hint';
+  hint.textContent =
+    mode === 'chords' ? 'Tap all keys in this chord' : 'Tap all keys in this scale';
+  left.appendChild(hint);
   const name = document.createElement('div');
   name.className = 'scale-name';
   name.textContent = promptName;

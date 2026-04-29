@@ -65,7 +65,15 @@ html, body {
 
 .subtitle {
   color: var(--fg-dim);
-  margin: 0 0 32px;
+  margin: 0 0 12px;
+}
+
+.howto {
+  color: var(--fg-dim);
+  font-size: 0.9rem;
+  max-width: 520px;
+  margin: 0 0 28px;
+  line-height: 1.4;
 }
 
 .difficulty-row {
@@ -157,6 +165,14 @@ html, body {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.prompt-hint {
+  font-size: 0.7rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
 }
 
 .scale-name {

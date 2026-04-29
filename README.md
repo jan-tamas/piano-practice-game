@@ -9,6 +9,7 @@ The picker is **adaptive** — scales/chords you get wrong or play slowly come u
 ## Features
 
 - **Two practice modes** — toggle between **Scales** and **Chords** on the start screen
+- **In-app guidance** — one-line instructions on the title screen and a small caption above each prompt ("Tap all keys in this scale/chord")
 - **Three difficulty tiers per mode**
   - **Scales — Easy:** Major and Natural Minor (24 scales)
   - **Scales — Medium:** adds Harmonic/Melodic Minor and Pentatonics (72 scales)

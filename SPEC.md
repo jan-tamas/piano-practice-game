@@ -31,6 +31,7 @@ The user picks a **mode** — *Scales* or *Chords* — on the entry screen; the 
 ### 3.1 Difficulty Select (entry screen)
 
 - **Mode toggle** at the top: **Scales** / **Chords**. The chosen mode is remembered across sessions and determines what the difficulty tiers below mean.
+- **One-line howto** under the subtitle: *"Tap every key that belongs to the scale or chord, then Submit. You're timed — accuracy and speed both count."* Sets expectations for first-time users.
 - Three buttons: **Easy**, **Medium**, **Hard** — descriptions adapt to the active mode.
 - Small "History" link → opens a panel showing the log of past attempts (mode, prompt, time, result, date) with a mode filter.
 - Difficulty choice is remembered across sessions.
@@ -52,7 +53,7 @@ Layout (landscape):
 └────────────────────────────────────────────────────────────────┘
 ```
 
-- **Top-left:** scale name in large type (e.g. "F# Harmonic Minor").
+- **Top-left:** small uppercase caption ("Tap all keys in this scale" or "…in this chord", depending on mode) above the scale/chord name in large type (e.g. "F# Harmonic Minor"). The caption disappears on the feedback view, where the action is already done.
 - **Top-right:** running stopwatch, mm:ss.cs. Starts the moment the scale appears.
 - **Bottom:** piano keyboard, ~2.5 octaves (C3 to F5 → 30 keys: 18 white + 12 black). Spans most of the screen width.
 - **Right of keyboard:** Submit button, large enough to tap with the thumb.

@@ -1,5 +1,6 @@
+import { chordsForTier } from './chords';
 import { scalesForTier } from './scales';
-import type { Difficulty, Scale, ScaleStats, Stored } from './types';
+import type { Difficulty, Mode, Prompt, ScaleStats, Stored } from './types';
 
 type Stats = {
   errorRate: number;
@@ -30,18 +31,20 @@ function clamp(x: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, x));
 }
 
-export function pickScale(state: Stored, tier: Difficulty, lastScaleId: string | null): Scale {
-  const tierScales = scalesForTier(tier);
-
+function pickWeighted<T extends Prompt>(
+  pool: T[],
+  statsMap: Record<string, ScaleStats>,
+  lastId: string | null,
+): T {
   const tierTimes: number[] = [];
-  for (const s of tierScales) {
-    const st = computeStats(state.scaleStats[s.id]);
+  for (const p of pool) {
+    const st = computeStats(statsMap[p.id]);
     if (st.avgTimeMs !== null) tierTimes.push(st.avgTimeMs);
   }
   const tierMedianMs = median(tierTimes) || 10_000;
 
-  const weights: number[] = tierScales.map((s) => {
-    const stats = state.scaleStats[s.id];
+  const weights = pool.map((p) => {
+    const stats = statsMap[p.id];
     const attempts = stats?.attempts ?? 0;
     const { errorRate, avgTimeMs } = computeStats(stats);
     const normalizedTime = avgTimeMs === null
@@ -52,15 +55,27 @@ export function pickScale(state: Stored, tier: Difficulty, lastScaleId: string |
       4 * errorRate +
       2 * normalizedTime +
       (attempts === 0 ? 3 : 0);
-    if (s.id === lastScaleId) w *= 0.2;
+    if (p.id === lastId) w *= 0.2;
     return Math.max(w, 0.05);
   });
 
   const total = weights.reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
-  for (let i = 0; i < tierScales.length; i++) {
+  for (let i = 0; i < pool.length; i++) {
     r -= weights[i];
-    if (r <= 0) return tierScales[i];
+    if (r <= 0) return pool[i];
   }
-  return tierScales[tierScales.length - 1];
+  return pool[pool.length - 1];
+}
+
+export function pickPrompt(
+  state: Stored,
+  mode: Mode,
+  tier: Difficulty,
+  lastId: string | null,
+): Prompt {
+  if (mode === 'chords') {
+    return pickWeighted(chordsForTier(tier), state.chordStats, lastId);
+  }
+  return pickWeighted(scalesForTier(tier), state.scaleStats, lastId);
 }

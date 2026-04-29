@@ -1,4 +1,4 @@
-import type { AttemptLog, Difficulty, Session } from './types';
+import type { AttemptLog, Difficulty, Mode, Session } from './types';
 
 export function roundScore(attempt: AttemptLog): number {
   if (!attempt.correct) return 0;
@@ -9,14 +9,16 @@ export function roundScore(attempt: AttemptLog): number {
 export type LiveSession = {
   id: string;
   startedAt: number;
+  mode: Mode;
   difficulty: Difficulty;
   attempts: AttemptLog[];
 };
 
-export function newLiveSession(difficulty: Difficulty): LiveSession {
+export function newLiveSession(mode: Mode, difficulty: Difficulty): LiveSession {
   return {
     id: `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     startedAt: Date.now(),
+    mode,
     difficulty,
     attempts: [],
   };
@@ -35,6 +37,7 @@ export function finalize(live: LiveSession): Session | null {
     id: live.id,
     startedAt: live.startedAt,
     endedAt: Date.now(),
+    mode: live.mode,
     difficulty: live.difficulty,
     attempts: live.attempts.length,
     correctAttempts: correct.length,

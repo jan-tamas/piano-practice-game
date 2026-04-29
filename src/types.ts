@@ -1,5 +1,7 @@
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
+export type Mode = 'scales' | 'chords';
+
 export type ScaleType =
   | 'major'
   | 'naturalMinor'
@@ -16,6 +18,24 @@ export type ScaleType =
   | 'wholeTone'
   | 'diminished';
 
+export type ChordType =
+  | 'majorTriad'
+  | 'minorTriad'
+  | 'maj7'
+  | 'min7'
+  | 'dom7'
+  | 'diminished'
+  | 'augmented'
+  | 'sus2'
+  | 'sus4'
+  | 'min7b5'
+  | 'dim7'
+  | 'dom9'
+  | 'maj9'
+  | 'min9'
+  | 'dom11'
+  | 'dom13';
+
 export type PitchClass = number; // 0..11, 0 = C
 
 export type Scale = {
@@ -26,8 +46,24 @@ export type Scale = {
   pitchClasses: PitchClass[]; // sorted ascending
 };
 
+export type Chord = {
+  id: string;            // e.g. "D_min7"
+  rootPc: PitchClass;
+  type: ChordType;
+  displayName: string;   // e.g. "Dm7", "G7", "C#dim"
+  pitchClasses: PitchClass[]; // sorted ascending
+};
+
+// Common shape used by the round/feedback UI.
+export type Prompt = {
+  id: string;
+  rootPc: PitchClass;
+  displayName: string;
+  pitchClasses: PitchClass[];
+};
+
 export type AttemptLog = {
-  scaleId: string;
+  scaleId: string;       // also used for chord ids in chord mode
   timestamp: number;
   elapsedMs: number;
   correct: boolean;
@@ -48,6 +84,7 @@ export type Session = {
   id: string;
   startedAt: number;
   endedAt: number;
+  mode: Mode;
   difficulty: Difficulty;
   attempts: number;
   correctAttempts: number;
@@ -56,9 +93,12 @@ export type Session = {
 };
 
 export type Stored = {
+  mode: Mode;
   difficulty: Difficulty;
   history: AttemptLog[];
   scaleStats: Record<string, ScaleStats>;
+  chordHistory: AttemptLog[];
+  chordStats: Record<string, ScaleStats>;
   sessions: Session[];
   settings: Settings;
 };

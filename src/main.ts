@@ -1,11 +1,11 @@
 import { playBell, playBuzzer } from './audio';
 import { Piano } from './piano';
 import { pitchClassesEqual } from './scales';
-import { pickScale } from './selector';
+import { pickPrompt } from './selector';
 import { finalize, liveScore, newLiveSession, scoreBracket, type LiveSession } from './session';
 import { load, recordAttempt, recordSession, resetStats, save } from './storage';
 import { Stopwatch, formatMs } from './stopwatch';
-import type { AttemptLog, Difficulty, PitchClass, Scale, Session, Stored } from './types';
+import type { AttemptLog, Difficulty, Mode, PitchClass, Prompt, Session, Stored } from './types';
 
 type Screen =
   | 'difficulty'
@@ -16,25 +16,27 @@ type Screen =
   | 'settings';
 
 type RoundState = {
-  scale: Scale;
+  prompt: Prompt;
   stopwatch: Stopwatch;
   piano: Piano;
 };
 
 type FeedbackState = {
-  scale: Scale;
+  prompt: Prompt;
   attempt: AttemptLog;
 };
 
 const root = document.getElementById('app') as HTMLDivElement;
 
 let state: Stored = load();
-let lastScaleId: string | null = null;
+let lastPromptId: Record<Mode, string | null> = { scales: null, chords: null };
 let screen: Screen = 'difficulty';
 let round: RoundState | null = null;
 let feedback: FeedbackState | null = null;
 let liveSession: LiveSession | null = null;
 let lastFinishedSession: Session | null = null;
+let historyFilter: 'all' | Mode = 'all';
+let chartFilter: 'all' | Mode = 'all';
 
 function render(): void {
   root.innerHTML = '';
@@ -72,17 +74,45 @@ function renderDifficulty(): void {
 
   const sub = document.createElement('p');
   sub.className = 'subtitle';
-  sub.textContent = 'Choose a difficulty';
+  sub.textContent = 'Pick a mode and difficulty';
   wrap.appendChild(sub);
 
+  // Mode toggle.
+  const modeRow = document.createElement('div');
+  modeRow.className = 'mode-toggle';
+  const modes: { id: Mode; label: string }[] = [
+    { id: 'scales', label: 'Scales' },
+    { id: 'chords', label: 'Chords' },
+  ];
+  for (const m of modes) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `mode-btn ${state.mode === m.id ? 'active' : ''}`;
+    btn.textContent = m.label;
+    btn.onclick = () => {
+      state = { ...state, mode: m.id };
+      save(state);
+      render();
+    };
+    modeRow.appendChild(btn);
+  }
+  wrap.appendChild(modeRow);
+
+  // Difficulty buttons.
   const row = document.createElement('div');
   row.className = 'difficulty-row';
 
-  const tiers: { id: Difficulty; label: string; desc: string }[] = [
+  const scaleTiers: { id: Difficulty; label: string; desc: string }[] = [
     { id: 'easy', label: 'Easy', desc: 'Major and Minor scales' },
     { id: 'medium', label: 'Medium', desc: 'Adds Harmonic/Melodic Minor + Pentatonics' },
     { id: 'hard', label: 'Hard', desc: 'Adds Modes, Blues, Whole Tone, Diminished' },
   ];
+  const chordTiers: { id: Difficulty; label: string; desc: string }[] = [
+    { id: 'easy', label: 'Easy', desc: 'Triads + maj7, m7, 7' },
+    { id: 'medium', label: 'Medium', desc: 'Adds dim, aug, sus2/4, m7♭5, dim7' },
+    { id: 'hard', label: 'Hard', desc: 'Adds 9ths, 11ths, 13ths' },
+  ];
+  const tiers = state.mode === 'chords' ? chordTiers : scaleTiers;
 
   for (const t of tiers) {
     const btn = document.createElement('button');
@@ -92,7 +122,7 @@ function renderDifficulty(): void {
     btn.onclick = () => {
       state = { ...state, difficulty: t.id };
       save(state);
-      liveSession = newLiveSession(t.id);
+      liveSession = newLiveSession(state.mode, t.id);
       startRound();
     };
     row.appendChild(btn);
@@ -127,12 +157,13 @@ function startRound(): void {
 }
 
 function renderRound(): void {
-  const scale = pickScale(state, state.difficulty, lastScaleId);
+  const mode = liveSession?.mode ?? state.mode;
+  const prompt = pickPrompt(state, mode, state.difficulty, lastPromptId[mode]);
 
   const wrap = document.createElement('div');
   wrap.className = 'screen round-screen';
 
-  wrap.appendChild(buildRoundHeader(scale.displayName, '00:00.00'));
+  wrap.appendChild(buildRoundHeader(prompt.displayName, '00:00.00'));
 
   const playArea = document.createElement('div');
   playArea.className = 'play-area';
@@ -152,14 +183,14 @@ function renderRound(): void {
 
   const piano = new Piano(pianoHost, () => { /* tracked internally */ });
   const stopwatch = new Stopwatch();
-  round = { scale, stopwatch, piano };
+  round = { prompt, stopwatch, piano };
 
   submit.onclick = () => submitRound();
 
   stopwatch.start((ms) => updateTimer(ms));
 }
 
-function buildRoundHeader(scaleName: string, timerText: string): HTMLElement {
+function buildRoundHeader(promptName: string, timerText: string): HTMLElement {
   const header = document.createElement('div');
   header.className = 'round-header';
 
@@ -167,7 +198,7 @@ function buildRoundHeader(scaleName: string, timerText: string): HTMLElement {
   left.className = 'round-header-left';
   const name = document.createElement('div');
   name.className = 'scale-name';
-  name.textContent = scaleName;
+  name.textContent = promptName;
   left.appendChild(name);
 
   const right = document.createElement('div');
@@ -198,15 +229,15 @@ function updateTimer(ms: number): void {
 function submitRound(): void {
   if (!round) return;
   const elapsedMs = round.stopwatch.stop();
-  const scalePcs = new Set(round.scale.pitchClasses);
+  const promptPcs = new Set(round.prompt.pitchClasses);
   const markedPcs = round.piano.selectedPcs();
 
-  const missed: PitchClass[] = round.scale.pitchClasses.filter((pc) => !markedPcs.has(pc));
-  const extra: PitchClass[] = [...markedPcs].filter((pc) => !scalePcs.has(pc));
-  const correct = pitchClassesEqual([...markedPcs], round.scale.pitchClasses);
+  const missed: PitchClass[] = round.prompt.pitchClasses.filter((pc) => !markedPcs.has(pc));
+  const extra: PitchClass[] = [...markedPcs].filter((pc) => !promptPcs.has(pc));
+  const correct = pitchClassesEqual([...markedPcs], round.prompt.pitchClasses);
 
   const attempt: AttemptLog = {
-    scaleId: round.scale.id,
+    scaleId: round.prompt.id,
     timestamp: Date.now(),
     elapsedMs,
     correct,
@@ -214,18 +245,19 @@ function submitRound(): void {
     extraNotes: extra,
   };
 
-  state = recordAttempt(state, attempt);
+  const mode: Mode = liveSession?.mode ?? state.mode;
+  state = recordAttempt(state, mode, attempt);
   if (liveSession) liveSession.attempts.push(attempt);
-  lastScaleId = round.scale.id;
+  lastPromptId[mode] = round.prompt.id;
 
   if (!state.settings.muted) {
     if (correct) playBell();
     else playBuzzer();
   }
 
-  feedback = { scale: round.scale, attempt };
+  feedback = { prompt: round.prompt, attempt };
   round.piano.setInteractive(false);
-  round.piano.showFeedback(scalePcs);
+  round.piano.showFeedback(promptPcs);
   showFeedbackOverlay();
   round = null;
   screen = 'feedback';
@@ -252,6 +284,7 @@ function endSession(): void {
   }
   state = recordSession(state, finished);
   lastFinishedSession = finished;
+  chartFilter = 'all';
   screen = 'sessionSummary';
   render();
 }
@@ -280,7 +313,7 @@ function showFeedbackOverlay(): void {
       : '';
     header.innerHTML = `
       <div class="round-header-left">
-        <div class="scale-name">${escapeHtml(feedback.scale.displayName)}</div>
+        <div class="scale-name">${escapeHtml(feedback.prompt.displayName)}</div>
         ${liveScoreText ? `<div class="live-score">${liveScoreText}</div>` : ''}
       </div>
       <div class="round-header-right">
@@ -342,7 +375,9 @@ function renderSessionSummary(): void {
   const bracket = scoreBracket(session.sessionScore);
   const scoreBox = document.createElement('div');
   scoreBox.className = `score-hero ${bracket.className}`;
+  const modeLabel = session.mode === 'chords' ? 'Chords' : 'Scales';
   scoreBox.innerHTML = `
+    <div class="score-mode">${modeLabel} · ${session.difficulty}</div>
     <div class="score-number">${session.sessionScore.toFixed(0)}</div>
     <div class="score-label">${bracket.label}</div>
   `;
@@ -364,31 +399,65 @@ function renderSessionSummary(): void {
   `;
   wrap.appendChild(stats);
 
-  // Comparison to previous session.
-  const prev = state.sessions
-    .slice(0, -1) // exclude current (just appended)
-    .filter((s) => s.id !== session.id)
+  // Comparison vs the previous session of the SAME mode.
+  const prevSameMode = state.sessions
+    .filter((s) => s.id !== session.id && s.mode === session.mode)
     .at(-1);
   const cmp = document.createElement('div');
   cmp.className = 'comparison';
-  if (prev) {
-    const delta = session.sessionScore - prev.sessionScore;
+  if (prevSameMode) {
+    const delta = session.sessionScore - prevSameMode.sessionScore;
     const sign = delta > 0 ? '+' : '';
     const cls = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
-    cmp.innerHTML = `<span class="cmp-${cls}">${sign}${delta.toFixed(1)}</span> vs. previous session (${prev.sessionScore.toFixed(0)})`;
+    cmp.innerHTML = `<span class="cmp-${cls}">${sign}${delta.toFixed(1)}</span> vs. previous ${modeLabel.toLowerCase()} session (${prevSameMode.sessionScore.toFixed(0)})`;
   } else {
-    cmp.textContent = 'First session — keep going to see how you improve.';
+    cmp.textContent = `First ${modeLabel.toLowerCase()} session — keep going to see how you improve.`;
   }
   wrap.appendChild(cmp);
 
-  // Chart.
+  // Chart with mode filter.
   const chartWrap = document.createElement('div');
   chartWrap.className = 'chart-wrap';
+
+  const chartHead = document.createElement('div');
+  chartHead.className = 'chart-head';
   const chartTitle = document.createElement('div');
   chartTitle.className = 'chart-title';
   chartTitle.textContent = 'Recent sessions';
-  chartWrap.appendChild(chartTitle);
-  chartWrap.appendChild(buildChart(state.sessions, session.id));
+  chartHead.appendChild(chartTitle);
+
+  const filterRow = document.createElement('div');
+  filterRow.className = 'chart-filter';
+  const filters: { id: 'all' | Mode; label: string }[] = [
+    { id: 'all', label: 'Both' },
+    { id: 'scales', label: 'Scales' },
+    { id: 'chords', label: 'Chords' },
+  ];
+  for (const f of filters) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `chip ${chartFilter === f.id ? 'active' : ''}`;
+    btn.textContent = f.label;
+    btn.onclick = () => {
+      chartFilter = f.id;
+      render();
+    };
+    filterRow.appendChild(btn);
+  }
+  chartHead.appendChild(filterRow);
+  chartWrap.appendChild(chartHead);
+
+  chartWrap.appendChild(buildChart(state.sessions, session.id, chartFilter));
+
+  // Legend.
+  const legend = document.createElement('div');
+  legend.className = 'chart-legend';
+  legend.innerHTML = `
+    <span class="legend-item"><span class="legend-swatch scales"></span>Scales</span>
+    <span class="legend-item"><span class="legend-swatch chords"></span>Chords</span>
+  `;
+  chartWrap.appendChild(legend);
+
   wrap.appendChild(chartWrap);
 
   // Buttons.
@@ -399,7 +468,7 @@ function renderSessionSummary(): void {
   newBtn.className = 'submit-btn';
   newBtn.textContent = 'New session';
   newBtn.onclick = () => {
-    liveSession = newLiveSession(state.difficulty);
+    liveSession = newLiveSession(state.mode, state.difficulty);
     startRound();
   };
   const doneBtn = document.createElement('button');
@@ -413,11 +482,20 @@ function renderSessionSummary(): void {
   root.appendChild(wrap);
 }
 
-function buildChart(sessions: Session[], currentId: string): SVGSVGElement {
+function buildChart(
+  sessions: Session[],
+  currentId: string,
+  filter: 'all' | Mode,
+): SVGSVGElement {
+  // Use the last 20 sessions overall as the x-axis. Filter only affects which
+  // series get drawn.
   const recent = sessions.slice(-20);
-  const allTimeBest = sessions.length
-    ? Math.max(...sessions.map((s) => s.sessionScore))
-    : 100;
+  const considered = sessions.filter(
+    (s) => filter === 'all' || s.mode === filter,
+  );
+  const allTimeBest = considered.length
+    ? Math.max(...considered.map((s) => s.sessionScore))
+    : 0;
 
   const W = 600;
   const H = 200;
@@ -429,22 +507,23 @@ function buildChart(sessions: Session[], currentId: string): SVGSVGElement {
   const innerH = H - PAD_T - PAD_B;
   const maxScore = 100;
 
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('class', 'chart');
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
-  // Y-axis labels at 0, 50, 100.
+  // Y-axis grid + labels at 0, 50, 100.
   for (const yVal of [0, 50, 100]) {
     const y = PAD_T + innerH - (yVal / maxScore) * innerH;
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    const line = document.createElementNS(svgNS, 'line');
     line.setAttribute('x1', String(PAD_L));
     line.setAttribute('x2', String(W - PAD_R));
     line.setAttribute('y1', String(y));
     line.setAttribute('y2', String(y));
     line.setAttribute('class', 'chart-grid');
     svg.appendChild(line);
-    const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    const lbl = document.createElementNS(svgNS, 'text');
     lbl.setAttribute('x', String(PAD_L - 6));
     lbl.setAttribute('y', String(y + 4));
     lbl.setAttribute('text-anchor', 'end');
@@ -453,17 +532,17 @@ function buildChart(sessions: Session[], currentId: string): SVGSVGElement {
     svg.appendChild(lbl);
   }
 
-  // All-time best line.
-  if (sessions.length > 1) {
+  // All-time best line for the active filter.
+  if (considered.length > 1 && allTimeBest > 0) {
     const y = PAD_T + innerH - (allTimeBest / maxScore) * innerH;
-    const best = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    const best = document.createElementNS(svgNS, 'line');
     best.setAttribute('x1', String(PAD_L));
     best.setAttribute('x2', String(W - PAD_R));
     best.setAttribute('y1', String(y));
     best.setAttribute('y2', String(y));
     best.setAttribute('class', 'chart-best');
     svg.appendChild(best);
-    const bestLbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    const bestLbl = document.createElementNS(svgNS, 'text');
     bestLbl.setAttribute('x', String(W - PAD_R));
     bestLbl.setAttribute('y', String(y - 4));
     bestLbl.setAttribute('text-anchor', 'end');
@@ -472,30 +551,54 @@ function buildChart(sessions: Session[], currentId: string): SVGSVGElement {
     svg.appendChild(bestLbl);
   }
 
-  // Bars.
   const n = recent.length;
   const slot = innerW / Math.max(n, 1);
-  const barW = Math.max(4, slot * 0.7);
-  recent.forEach((s, i) => {
-    const x = PAD_L + i * slot + (slot - barW) / 2;
-    const h = (s.sessionScore / maxScore) * innerH;
-    const y = PAD_T + innerH - h;
-    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.setAttribute('x', String(x));
-    rect.setAttribute('y', String(y));
-    rect.setAttribute('width', String(barW));
-    rect.setAttribute('height', String(h));
-    rect.setAttribute('class', `chart-bar ${s.id === currentId ? 'current' : ''}`);
-    rect.setAttribute('rx', '2');
-    const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-    const d = new Date(s.startedAt);
-    titleEl.textContent = `${d.toLocaleString()} — ${s.sessionScore.toFixed(0)} (${s.attempts} attempts)`;
-    rect.appendChild(titleEl);
-    svg.appendChild(rect);
-  });
+  const xFor = (i: number) => PAD_L + i * slot + slot / 2;
+  const yFor = (score: number) =>
+    PAD_T + innerH - (score / maxScore) * innerH;
+
+  const drawSeries = (mode: Mode, cls: string) => {
+    if (filter !== 'all' && filter !== mode) return;
+    const points: { i: number; s: Session }[] = [];
+    recent.forEach((s, i) => {
+      if (s.mode === mode) points.push({ i, s });
+    });
+    if (points.length === 0) return;
+
+    if (points.length > 1) {
+      const d = points
+        .map(
+          (p, idx) =>
+            `${idx === 0 ? 'M' : 'L'}${xFor(p.i).toFixed(2)},${yFor(p.s.sessionScore).toFixed(2)}`,
+        )
+        .join(' ');
+      const path = document.createElementNS(svgNS, 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('class', `chart-line ${cls}`);
+      path.setAttribute('fill', 'none');
+      svg.appendChild(path);
+    }
+
+    for (const p of points) {
+      const c = document.createElementNS(svgNS, 'circle');
+      c.setAttribute('cx', String(xFor(p.i)));
+      c.setAttribute('cy', String(yFor(p.s.sessionScore)));
+      c.setAttribute('r', p.s.id === currentId ? '5.5' : '3.5');
+      c.setAttribute('class', `chart-point ${cls} ${p.s.id === currentId ? 'current' : ''}`);
+      const titleEl = document.createElementNS(svgNS, 'title');
+      const d = new Date(p.s.startedAt);
+      const modeLabel = p.s.mode === 'chords' ? 'Chords' : 'Scales';
+      titleEl.textContent = `${d.toLocaleString()} — ${modeLabel} ${p.s.difficulty} — ${p.s.sessionScore.toFixed(0)} (${p.s.attempts} attempts)`;
+      c.appendChild(titleEl);
+      svg.appendChild(c);
+    }
+  };
+
+  drawSeries('scales', 'scales');
+  drawSeries('chords', 'chords');
 
   // X-axis label.
-  const xLbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  const xLbl = document.createElementNS(svgNS, 'text');
   xLbl.setAttribute('x', String(PAD_L + innerW / 2));
   xLbl.setAttribute('y', String(H - 6));
   xLbl.setAttribute('text-anchor', 'middle');
@@ -528,7 +631,37 @@ function renderHistory(): void {
   title.textContent = 'History';
   wrap.appendChild(title);
 
-  if (state.history.length === 0) {
+  // Filter chips.
+  const filterRow = document.createElement('div');
+  filterRow.className = 'chart-filter';
+  const filters: { id: 'all' | Mode; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'scales', label: 'Scales' },
+    { id: 'chords', label: 'Chords' },
+  ];
+  for (const f of filters) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `chip ${historyFilter === f.id ? 'active' : ''}`;
+    btn.textContent = f.label;
+    btn.onclick = () => { historyFilter = f.id; render(); };
+    filterRow.appendChild(btn);
+  }
+  wrap.appendChild(filterRow);
+
+  // Tag each entry with its mode then merge sorted by timestamp desc.
+  type Tagged = AttemptLog & { mode: Mode };
+  const tagged: Tagged[] = [
+    ...state.history.map((h) => ({ ...h, mode: 'scales' as Mode })),
+    ...state.chordHistory.map((h) => ({ ...h, mode: 'chords' as Mode })),
+  ];
+  const filtered =
+    historyFilter === 'all'
+      ? tagged
+      : tagged.filter((h) => h.mode === historyFilter);
+  filtered.sort((a, b) => b.timestamp - a.timestamp);
+
+  if (filtered.length === 0) {
     const p = document.createElement('p');
     p.textContent = 'No attempts yet.';
     wrap.appendChild(p);
@@ -536,16 +669,18 @@ function renderHistory(): void {
     const table = document.createElement('table');
     table.className = 'history-table';
     table.innerHTML = `
-      <thead><tr><th>When</th><th>Scale</th><th>Time</th><th>Result</th></tr></thead>
+      <thead><tr><th>When</th><th>Mode</th><th>Prompt</th><th>Time</th><th>Result</th></tr></thead>
     `;
     const tbody = document.createElement('tbody');
-    for (const h of state.history.slice(0, 100)) {
+    for (const h of filtered.slice(0, 100)) {
       const tr = document.createElement('tr');
       const date = new Date(h.timestamp);
       const cls = h.correct ? 'ok' : 'bad';
       const mark = h.correct ? '✓' : '✗';
+      const modeLabel = h.mode === 'chords' ? 'Chord' : 'Scale';
       tr.innerHTML = `
         <td>${date.toLocaleString()}</td>
+        <td>${modeLabel}</td>
         <td>${escapeHtml(h.scaleId)}</td>
         <td>${formatMs(h.elapsedMs)}</td>
         <td class="${cls}">${mark}</td>
@@ -596,7 +731,7 @@ function renderSettings(): void {
   resetBtn.onclick = () => {
     if (confirm('Reset all history and adaptive stats? This cannot be undone.')) {
       state = resetStats(state);
-      lastScaleId = null;
+      lastPromptId = { scales: null, chords: null };
       render();
     }
   };

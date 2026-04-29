@@ -456,6 +456,122 @@ html, body {
   fill: var(--accent);
 }
 
+.chart-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-line.scales { stroke: var(--accent); }
+.chart-line.chords { stroke: var(--warn); }
+
+.chart-point.scales { fill: var(--accent); stroke: none; }
+.chart-point.chords { fill: var(--warn); stroke: none; }
+
+.chart-point.current {
+  stroke: var(--fg);
+  stroke-width: 2;
+}
+
+.chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.chart-filter {
+  display: flex;
+  gap: 6px;
+}
+
+.chip {
+  background: var(--bg-2);
+  color: var(--fg-dim);
+  border: 1px solid #2c313a;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color 120ms, border-color 120ms, background 120ms;
+}
+
+.chip:hover {
+  color: var(--fg);
+}
+
+.chip.active {
+  color: var(--fg);
+  border-color: var(--accent);
+  background: rgba(108, 180, 255, 0.12);
+}
+
+.chart-legend {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--fg-dim);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.legend-swatch.scales { background: var(--accent); }
+.legend-swatch.chords { background: var(--warn); }
+
+/* ---------- Mode toggle ---------- */
+
+.mode-toggle {
+  display: inline-flex;
+  background: var(--bg-2);
+  border-radius: 999px;
+  padding: 4px;
+  margin-bottom: 24px;
+  gap: 4px;
+}
+
+.mode-btn {
+  background: transparent;
+  color: var(--fg-dim);
+  border: none;
+  border-radius: 999px;
+  padding: 8px 22px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 120ms, background 120ms;
+}
+
+.mode-btn:hover {
+  color: var(--fg);
+}
+
+.mode-btn.active {
+  background: var(--accent);
+  color: #0e1117;
+}
+
+.score-mode {
+  font-size: 0.8rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
 .summary-actions {
   display: flex;
   gap: 16px;

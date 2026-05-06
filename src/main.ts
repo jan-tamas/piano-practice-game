@@ -97,6 +97,7 @@ function renderDifficulty(): void {
     btn.type = 'button';
     btn.className = `mode-btn ${state.mode === m.id ? 'active' : ''}`;
     btn.textContent = m.label;
+    btn.dataset.testid = `mode-btn-${m.id}`;
     btn.onclick = () => {
       state = { ...state, mode: m.id };
       save(state);
@@ -126,6 +127,7 @@ function renderDifficulty(): void {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `difficulty-btn ${state.difficulty === t.id ? 'active' : ''}`;
+    btn.dataset.testid = `difficulty-btn-${t.id}`;
     btn.innerHTML = `<span class="dl">${t.label}</span><span class="dd">${t.desc}</span>`;
     btn.onclick = () => {
       state = { ...state, difficulty: t.id };
@@ -141,9 +143,11 @@ function renderDifficulty(): void {
   // Auto-advance toggle — flow practice without pressing Submit.
   const autoRow = document.createElement('label');
   autoRow.className = 'title-toggle';
+  autoRow.dataset.testid = 'auto-advance-row';
   const autoCb = document.createElement('input');
   autoCb.type = 'checkbox';
   autoCb.checked = state.settings.autoAdvance;
+  autoCb.dataset.testid = 'auto-advance-checkbox';
   autoCb.onchange = () => {
     state = {
       ...state,
@@ -160,6 +164,7 @@ function renderDifficulty(): void {
 
   const midiHint = document.createElement('p');
   midiHint.className = 'midi-hint';
+  midiHint.dataset.testid = 'midi-hint';
   midiHint.textContent = isMidiSupported()
     ? 'MIDI keyboards are supported — connect one and play.'
     : 'MIDI input not supported in this browser (try Chrome/Edge).';
@@ -171,11 +176,13 @@ function renderDifficulty(): void {
   histLink.type = 'button';
   histLink.className = 'link-btn';
   histLink.textContent = 'History';
+  histLink.dataset.testid = 'history-link';
   histLink.onclick = () => { screen = 'history'; render(); };
   const settingsLink = document.createElement('button');
   settingsLink.type = 'button';
   settingsLink.className = 'link-btn';
   settingsLink.textContent = 'Settings';
+  settingsLink.dataset.testid = 'settings-link';
   settingsLink.onclick = () => { screen = 'settings'; render(); };
   links.append(histLink, settingsLink);
   wrap.appendChild(links);

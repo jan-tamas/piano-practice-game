@@ -36,10 +36,12 @@ html, body {
 }
 
 #app {
-  height: 100vh;
+  height: 100dvh;
   width: 100vw;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .screen {
@@ -54,8 +56,9 @@ html, body {
 
 .difficulty-screen {
   align-items: center;
-  justify-content: center;
   text-align: center;
+  padding-top: 40px;
+  padding-bottom: 40px;
 }
 
 .difficulty-screen h1 {
@@ -689,5 +692,146 @@ html, body {
 @media (orientation: portrait) and (max-width: 900px) {
   #rotate-overlay {
     display: flex;
+  }
+}
+
+/* ---------- Mobile Landscape Adjustments ---------- */
+
+@media (max-height: 450px) and (orientation: landscape) {
+  #app {
+    overflow: visible;
+  }
+
+  .difficulty-screen {
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+
+  .difficulty-screen h1 {
+    font-size: 1.5rem;
+  }
+
+  .subtitle {
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+  }
+
+  .howto {
+    font-size: 0.75rem;
+    margin-bottom: 12px;
+  }
+
+  .mode-toggle {
+    margin-bottom: 12px;
+  }
+
+  .mode-btn {
+    padding: 4px 12px;
+    font-size: 0.8rem;
+  }
+
+  .difficulty-row {
+    margin-bottom: 12px;
+    gap: 10px;
+  }
+
+  .difficulty-btn {
+    padding: 12px 16px;
+    min-width: 140px;
+  }
+
+  .difficulty-btn .dl {
+    font-size: 1rem;
+  }
+
+  .difficulty-btn .dd {
+    font-size: 0.7rem;
+  }
+
+  .title-toggle {
+    margin-bottom: 6px;
+    font-size: 0.75rem;
+  }
+
+  .midi-hint {
+    font-size: 0.7rem;
+    margin-bottom: 12px;
+  }
+
+  .links {
+    gap: 10px;
+  }
+
+  .link-btn {
+    font-size: 0.8rem;
+    padding: 4px 6px;
+  }
+}
+
+/* Extra narrow landscape viewports (iPhone SE, etc.) */
+@media (max-height: 400px) and (orientation: landscape) {
+  .difficulty-screen {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .difficulty-screen h1 {
+    font-size: 1.4rem;
+  }
+
+  .subtitle {
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+  }
+
+  .howto {
+    font-size: 0.7rem;
+    margin-bottom: 10px;
+  }
+
+  .mode-toggle {
+    margin-bottom: 10px;
+  }
+
+  .mode-btn {
+    padding: 3px 10px;
+    font-size: 0.75rem;
+  }
+
+  .difficulty-row {
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+
+  .difficulty-btn {
+    padding: 10px 14px;
+    min-width: 130px;
+  }
+
+  .difficulty-btn .dl {
+    font-size: 0.95rem;
+  }
+
+  .difficulty-btn .dd {
+    font-size: 0.65rem;
+  }
+
+  .title-toggle {
+    margin-bottom: 4px;
+    font-size: 0.7rem;
+  }
+
+  .midi-hint {
+    font-size: 0.65rem;
+    margin-bottom: 10px;
+  }
+
+  .links {
+    gap: 8px;
+  }
+
+  .link-btn {
+    font-size: 0.75rem;
+    padding: 3px 5px;
   }
 }

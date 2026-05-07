@@ -115,7 +115,7 @@ export function rootName(pc: PitchClass, type: ScaleType): string {
 
 export function buildScale(rootPc: PitchClass, type: ScaleType): Scale {
   const pattern = SCALE_PATTERNS[type];
-  const pcs = pattern.map((iv) => ((rootPc + iv) % 12) as PitchClass).sort((a, b) => a - b);
+  const pcs = pattern.map((iv) => ((rootPc + iv) % 12) as PitchClass);
   const id = `${rootName(rootPc, type).replace('#', 's').replace('b', 'f')}_${type}`;
   const displayName = `${rootName(rootPc, type)} ${SCALE_TYPE_LABEL[type]}`;
   return {

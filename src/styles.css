@@ -10,12 +10,10 @@
   --warn: #f0b35a;
   --black-key: #1d1d1d;
   --black-key-edge: #000;
-  --white-key: #fafafa;
-  --white-key-edge: #c2c2c2;
+  --white-key: #ffffff;
+  --white-key-edge: #999;
   --selected: #6cb4ff;
   --selected-black: #2f6fb3;
-
-  --black-half-width: calc((100% / var(--white-count)) * 0.32);
 }
 
 * {
@@ -285,12 +283,15 @@ html, body {
   width: 100%;
   height: 100%;
   user-select: none;
+  overflow: hidden;
 }
 
 .piano-key-row {
   position: absolute;
-  inset: 0;
+  inset: 0; /* Remove the 1% right inset - let keys render to the edge */
   display: flex;
+  height: 100%;
+  overflow: hidden; /* Hide any overflow */
 }
 
 .piano-key {
@@ -302,24 +303,31 @@ html, body {
 }
 
 .piano-key.white {
-  background: transparent; /* SVG provides the fill */
+  background: var(--white-key);
+  border: none;
+  border-right: 2px solid var(--white-key-edge);
+  box-shadow: inset 0 -3px 0 var(--white-key-edge);
   transition: background 80ms;
 }
 
+.piano-key.white:last-child {
+  border-right: none;
+}
+
 .piano-key.white.selected {
-  background: transparent; /* SVG stroke changes via CSS */
+  background: var(--selected);
 }
 
 .piano-key.white.correct {
-  background: transparent;
+  background: var(--ok);
 }
 
 .piano-key.white.wrong {
-  background: transparent;
+  background: var(--bad);
 }
 
 .piano-key.white.missed {
-  background: transparent;
+  background: var(--warn);
 }
 
 /* Black key styling */
@@ -327,11 +335,12 @@ html, body {
   pointer-events: auto;
   position: absolute;
   top: 0;
-  height: 62%;
+  height: 65%;
   background: var(--black-key);
   border: 1px solid var(--black-key-edge);
-  border-radius: 0 0 5px 5px;
-  z-index: 2;
+  border-radius: 3px 3px 6px 6px;
+  z-index: 10;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
   transition: background 80ms;
 }
 

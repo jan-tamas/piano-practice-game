@@ -1,8 +1,8 @@
 import type { PitchClass } from './types';
 
-// C3 = MIDI 48. We display C3..F5 → 30 keys, 18 white + 12 black.
+// C3 = MIDI 48. We display C3..B5 → 35 keys, 21 white + 14 black.
 const RANGE_START = 48;        // C3
-const RANGE_END_INCL = 77;     // F5
+const RANGE_END_INCL = 83;     // B5
 
 const PC_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK_PCS = new Set<PitchClass>([1, 3, 6, 8, 10]);
@@ -103,112 +103,61 @@ export class Piano {
 
     // Precompute white key front width (100% / whiteCount)
     const whiteKeyFrontWidthPct = 100 / whiteCount;
-    // Black key width = 64% of white key front width (0.64)
-    const blackKeyWidthPct = whiteKeyFrontWidthPct * 0.64;
-    // At the back, we have 12 equal columns per octave
-    const backColWidthPct = (whiteKeyFrontWidthPct * 7) / 12;
+    // Black key width = (7 × white_key_full_width) / 12 = whiteKeyFrontWidthPct × 7/12
+    const _blackKeyWidthPct = whiteKeyFrontWidthPct * (7 / 12);
 
+    // First, render all white keys (they form the base layer)
     for (const k of keysInChromaticOrder) {
+      if (k.isBlack) continue; // Skip black keys for now
+      
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = `piano-key ${k.isBlack ? 'black' : 'white'}`;
+      btn.className = `piano-key white`;
       btn.dataset.midi = String(k.midi);
       btn.dataset.testid = `piano-key-${k.label}`;
       btn.setAttribute('aria-label', k.label);
       btn.addEventListener('click', () => this.handleClick(k.midi));
       this.keyEls[k.midi] = btn;
 
-      // Calculate position and shape
       const whiteIndex = k.whiteIndex;
-      const whiteFrontX = whiteIndex * whiteKeyFrontWidthPct;
+      btn.style.left = `${whiteIndex * whiteKeyFrontWidthPct}%`;
+      btn.style.width = `${whiteKeyFrontWidthPct}%`;
+      btn.style.height = '100%';
+      btn.style.position = 'absolute';
+      btn.style.zIndex = '1';
+      keyRow.appendChild(btn);
+    }
 
-      if (k.isBlack) {
-        // Black key: centered between adjacent white keys
-        // Position: left edge at whiteFrontX + (whiteKeyFrontWidthPct - blackKeyWidthPct) / 2
-        const leftPos = whiteFrontX + (whiteKeyFrontWidthPct - blackKeyWidthPct) / 2;
-        btn.style.left = `${leftPos}%`;
-        btn.style.width = `${blackKeyWidthPct}%`;
-        btn.style.height = '62%';
-        btn.style.position = 'absolute';
-        keyRow.appendChild(btn);
-      } else {
-        // White key: positioned at front, shape depends on backShape
-        btn.style.left = `${whiteFrontX}%`;
-        btn.style.width = `${whiteKeyFrontWidthPct}%`;
-        btn.style.height = '100%';
-        btn.style.position = 'relative';
-        
-        // Create SVG for the key shape
-        const svg = this.createWhiteKeyShapeSVG(k, whiteKeyFrontWidthPct, blackKeyWidthPct, backColWidthPct);
-        btn.appendChild(svg);
-        keyRow.appendChild(btn);
-      }
+    // Then, render black keys on top
+    for (const k of keysInChromaticOrder) {
+      if (!k.isBlack) continue; // Skip white keys
+      
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `piano-key black`;
+      btn.dataset.midi = String(k.midi);
+      btn.dataset.testid = `piano-key-${k.label}`;
+      btn.setAttribute('aria-label', k.label);
+      btn.addEventListener('click', () => this.handleClick(k.midi));
+      this.keyEls[k.midi] = btn;
+
+      const whiteIndex = k.whiteIndex;
+      // Black key: centered on the line between two white keys
+      const boundaryX = whiteIndex * whiteKeyFrontWidthPct;
+      const blackKeyLeft = boundaryX - (_blackKeyWidthPct / 2);
+      
+      btn.style.left = `${blackKeyLeft}%`;
+      btn.style.width = `${_blackKeyWidthPct}%`;
+      btn.style.height = '65%';
+      btn.style.position = 'absolute';
+      btn.style.top = '0';
+      btn.style.zIndex = '10';
+      keyRow.appendChild(btn);
     }
 
     this.host.appendChild(root);
     this.applyVisuals();
-  }
-
-  /**
-   * Create SVG path for white key shape based on backShape.
-   * The key is rendered as a path with:
-   * - Front edge: full width at y=0 (top)
-   * - Back edge: shaped according to backShape, with uniform column width at y=100% (bottom)
-   * 
-   * Coordinate system: (0,0) = top-left of key, (100,100) = bottom-right of key
-   * All dimensions are in percent relative to the white key's front width.
-   * 
-   * Back column width (for stems and black keys) = (7 × white_key_full_width) / 12
-   * This ensures uniform key widths at the back.
-   */
-  private createWhiteKeyShapeSVG(
-    k: KeyDef,
-    whiteKeyFrontWidthPct: number,
-    _blackKeyWidthPct: number,
-    backColWidthPct: number
-  ): SVGElement {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 100 100');
-    svg.setAttribute('preserveAspectRatio', 'none');
-    svg.style.width = '100%';
-    svg.style.height = '100%';
-
-    // Back column width in SVG units (100 units = 100% of white key front width)
-    const backColWidthUnits = (backColWidthPct / whiteKeyFrontWidthPct) * 100;
-
-    // Determine back edge coordinates
-    let backPath: string;
-    const xCenter = 50; // Center of white key (50% of its width)
-    const stemMargin = (backColWidthUnits / 2) + 1; // Slight margin for visual clarity
-
-    switch (k.backShape) {
-      case 'L': // C, F - stem on LEFT at back
-        // Left side: stem extends to back, right side cuts in
-        // Back edge: stem from left to x=(100 - backColWidthUnits)
-        backPath = `M 0 0 L 100 0 L 100 100 L ${100 - backColWidthUnits} 100 L ${100 - backColWidthUnits} ${50 - stemMargin} L 0 ${50 - stemMargin} Z`;
-        break;
-      case 'T': // D, G, A - stem near CENTER at back
-        // Center stem extends to back
-        backPath = `M 0 0 L 100 0 L 100 100 L ${xCenter + backColWidthUnits/2} 100 L ${xCenter + backColWidthUnits/2} ${50 - stemMargin} L ${xCenter - backColWidthUnits/2} ${50 - stemMargin} L ${xCenter - backColWidthUnits/2} 100 L 0 100 Z`;
-        break;
-      case 'J': // E, B - stem on RIGHT at back
-        // Right side: stem extends to back, left side cuts in
-        // Back edge: stem from x=backColWidthUnits to right edge
-        backPath = `M 0 0 L 100 0 L 100 ${50 - stemMargin} L ${backColWidthUnits} ${50 - stemMargin} L ${backColWidthUnits} 100 L 0 100 Z`;
-        break;
-      default: // full - shouldn't happen for white keys
-        backPath = 'M 0 0 L 100 0 L 100 100 L 0 100 Z';
-    }
-
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', backPath);
-    path.setAttribute('fill', 'var(--white-key)');
-    path.setAttribute('stroke', 'var(--white-key-edge)');
-    path.setAttribute('stroke-width', '1');
-
-    svg.appendChild(path);
-    return svg;
-  }
+}
 
   private handleClick(midi: number): void {
     if (!this.interactive) return;
